@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Barbearia Marcola - Sistema Profissional</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+
+<h1>💈 Barbearia Marcola</h1>
+<p>Sistema profissional de gerenciamento de fila</p>
+
+<div class="card">
+  <input id="nome" placeholder="Nome do cliente">
+  <button onclick="entrarFila()">Gerar Senha</button>
+</div>
+
+<h2>📋 Fila Atual</h2>
+<ul id="fila"></ul>
+
+<hr>
+
+<h2>🔐 Área Restrita do Barbeiro</h2>
+<input id="senhaAdmin" type="password" placeholder="Senha administrativa">
+<button onclick="loginAdmin()">Entrar</button>
+
+<div id="painelAdmin" style="display:none;">
+  <h2>🎛 Painel de Controle</h2>
+  <button class="btn-chamar" onclick="chamarProximo()">CHAMAR PRÓXIMO</button>
+</div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, onValue, remove, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAara_9NngSCCrCskbSNTkk9Bl2XQ7f-us",
+  authDomain: "barbearia-marcola.firebaseapp.com",
+  databaseURL: "https://barbearia-marcola-default-rtdb.firebaseio.com",
+  projectId: "barbearia-marcola",
+  storageBucket: "barbearia-marcola.appspot.com",
+  messagingSenderId: "1055225224019",
+  appId: "1:1055225224019:web:2c8fe6789c4ba6ba0e5fa6"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// ================= GERAR SENHA SEQUENCIAL =================
+async function gerarSenha() {
+  const snapshot = await get(ref(db, "contador"));
+  let numero = snapshot.exists() ? snapshot.val() + 1 : 1;
+
+  await fetch(`https://barbearia-marcola-default-rtdb.firebaseio.com/contador.json`, {
+    method: "PUT",
+    body: JSON.stringify(numero)
+  });
+
+  return numero.toString().padStart(3, "0");
+}
+
+// ================= CLIENTE ENTRA NA FILA =================
+window.entrarFila = async function() {
+  const nome = document.getElementById("nome").value;
+  if (!nome) return alert("Digite o nome do cliente");
+
+  const senha = await gerarSenha();
+
+  push(ref(db, "fila"), {
+    nome: nome,
+    senha: senha,
+    entrada: Date.now()
+  });
+
+  alert("Senha gerada: " + senha);
+  document.getElementById("nome").value = "";
+};
+
+// ================= MOSTRAR FILA COM TEMPO =================
+onValue(ref(db, "fila"), (snapshot) => {
+  const lista = document.getElementById("fila");
+  lista.innerHTML = "";
+
+  let pos = 1;
+  snapshot.forEach((child) => {
+    const d = child.val();
+    const tempo = pos * 10; // 10 minutos médio por cliente
+
+    const li = document.createElement("li");
+    li.innerHTML = `<b>${d.senha}</b> - ${d.nome} | ⏱ ${tempo} min`;
+    lista.appendChild(li);
+    pos++;
+  });
+});
+
+// ================= LOGIN ADMIN =================
+window.loginAdmin = function() {
+  const senha = document.getElementById("senhaAdmin").value;
+  if (senha === "empresa2026") {
+    document.getElementById("painelAdmin").style.display = "block";
+    alert("Admin logado com sucesso");
+  } else {
+    alert("Senha incorreta");
+  }
+};
+
+// ================= CHAMAR PRÓXIMO =================
+window.chamarProximo = async function() {
+  const snapshot = await get(ref(db, "fila"));
+  if (!snapshot.exists()) return alert("Fila vazia");
+
+  const primeiroKey = Object.keys(snapshot.val())[0];
+  const cliente = snapshot.val()[primeiroKey];
+
+  // salvar histórico
+  push(ref(db, "historico"), {
+    nome: cliente.nome,
+    senha: cliente.senha,
+    entrada: cliente.entrada,
+    saida: Date.now()
+  });
+
+  // remover da fila
+  remove(ref(db, "fila/" + primeiroKey));
+};
+</script>
+
+</body>
+</html>
